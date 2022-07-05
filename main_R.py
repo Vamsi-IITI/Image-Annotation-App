@@ -1,7 +1,6 @@
 from tkinter import *
 from tkinter import filedialog
 from tkinter import messagebox
-import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 import os
@@ -12,47 +11,6 @@ import random
 COLORS = ['red', 'blue','pink', 'cyan', 'green', 'black']
 # image sizes for the examples
 SIZE = 256, 256
-
-class ExampleApp(tk.Tk):
-    def __init__(self):
-        tk.Tk.__init__(self)
-        self.title("Image Labelling App")
-        self.geometry("1920x1080")
-        self.canvas = tk.Canvas(self)
-        self.canvas.pack(expand=True)
-        
-        self.t = Label(self.canvas, text="Enter Labels Seperated by Commas")
-        self.t.grid(row=3)
-        self.Label_text = Entry(self.canvas, text = "Enter Labels Seperated by Commas")
-        self.Label_text.grid(row=4)
-        self.check_labels = Button(self.canvas,text="Check Labels",command=self.write_class_text)
-        self.check_labels.grid(row=5)
-        self.check_labels = Button(self.canvas,text="Start program",command=self.start)
-        self.check_labels.grid(row=8)
-
-    def write_class_text(self):
-        self.labels = self.Label_text.get().split(",")
-
-        out1 = Label(self.canvas,text="your Labels are : ")
-        out1.grid(row=6)
-        out = Label(self.canvas,text= self.labels)
-        out.grid(row=7)
-
-        ans = ""
-        def remove_spaces(string):
-            return string.replace(" ", "")
-
-        for i in self.labels:
-            ans = ans + remove_spaces(i) + "\n"
-
-        with open("class.txt", 'w') as f:
-            f.write(ans)
-
-    def start(self):
-        root = Tk()
-        tool = LabelTool(root)
-        root.resizable(width =  True, height = True)
-        root.mainloop()
 
 class LabelTool():
     def __init__(self, master):
@@ -91,6 +49,11 @@ class LabelTool():
         self.hl = None
         self.vl = None
 
+        ####### New 
+        self.labels_list = []
+        self.class_dict = {}
+        self.Class_ID = 0
+
         # ----------------- GUI stuff ---------------------
         # dir entry & load
         # input image dir button
@@ -111,6 +74,17 @@ class LabelTool():
         self.desDirBtn = Button(self.frame, text="Label output folder", command=self.selectDesDir)
         self.desDirBtn.grid(row=1, column=0)
 
+        ####### New
+        # input labels entry 
+        self.labels_str = StringVar()
+        self.entrylabels = Entry(self.frame, textvariable=self.labels_str)
+        self.entrylabels.grid(row=2, column=1, sticky=W+E)
+
+        ####### New
+        # enter labels button
+        self.LabelsEntry = Button(self.frame, text="Enter Labels", command=self.Get_labels)
+        self.LabelsEntry.grid(row=2, column=0)
+
         # label file save dir entry
         self.svDestinationPath = StringVar()
         self.entryDes = Entry(self.frame, textvariable=self.svDestinationPath)
@@ -125,21 +99,22 @@ class LabelTool():
         self.parent.bind("s", self.cancelBBox)
         self.parent.bind("p", self.prevImage) # press 'p' to go backforward
         self.parent.bind("n", self.nextImage) # press 'n' to go forward
-        self.mainPanel.grid(row = 2, column = 1, rowspan = 4, sticky = W+N)
+        self.mainPanel.grid(row = 3, column = 1, rowspan = 4, sticky = W+N)
 
+        ####### Deleted 
         # choose class
-        self.classname = StringVar()
-        self.classcandidate = ttk.Combobox(self.frame, state='readonly', textvariable=self.classname)
-        self.classcandidate.grid(row=2, column=2)
-        if os.path.exists(self.classcandidate_filename):
-            with open(self.classcandidate_filename) as cf:
-                for line in cf.readlines():
-                    self.cla_can_temp.append(line.strip('\n'))
-        self.classcandidate['values'] = self.cla_can_temp
-        self.classcandidate.current(0)
-        self.currentLabelclass = self.classcandidate.get()
-        self.btnclass = Button(self.frame, text='Save', command=self.setClass)
-        self.btnclass.grid(row=2, column=3, sticky=W+E)
+        # self.classname = StringVar()
+        # self.classcandidate = ttk.Combobox(self.frame, state='readonly', textvariable=self.classname)
+        # self.classcandidate.grid(row=2, column=2)
+        # if os.path.exists(self.classcandidate_filename):
+        #     with open(self.classcandidate_filename) as cf:
+        #         for line in cf.readlines():
+        #             self.cla_can_temp.append(line.strip('\n'))
+        # self.classcandidate['values'] = self.cla_can_temp
+        # self.classcandidate.current(0)
+        # self.currentLabelclass = self.classcandidate.get()
+        # self.btnclass = Button(self.frame, text='Set Label', command=self.setClass)
+        # self.btnclass.grid(row=2, column=3, sticky=W+E)
 
         # showing bbox info & delete bbox
         self.lb1 = Label(self.frame, text = 'Bounding boxes:')
@@ -147,6 +122,11 @@ class LabelTool():
         self.listbox = Listbox(self.frame, width = 22, height = 12)
         self.listbox.grid(row = 4, column = 2, sticky = N+S)
         self.btnDel = Button(self.frame, text = 'Delete', command = self.delBBox)
+
+        ####### New 
+        self.parent.bind('<BackSpace>', self.delBBox)             # Press Backspace to delete the selected bbox annotation
+        self.parent.bind('<Delete>', self.clearBBox)              # Press Delete to delete all bbox annotation
+
         self.btnDel.grid(row = 4, column = 3, sticky = W+E+N)
         self.btnClear = Button(self.frame, text = 'ClearAll', command = self.clearBBox)
         self.btnClear.grid(row = 4, column = 3, sticky = W+E+S)
@@ -243,7 +223,40 @@ class LabelTool():
 
         self.loadImage()
         print('%d images loaded from %s' %(self.total, self.imageDir))
+    
+    ####### NEW
+    # getting and updating labels
+    def Get_labels(self):
 
+        self.labels_list = (self.labels_str.get()).split(",")
+        ans = ""
+        def remove_spaces(string):
+            return string.replace(" ", "")
+
+        for i in self.labels_list:
+            ans = ans + remove_spaces(i) + "\n"
+            i = remove_spaces(i) 
+        
+        open("class.txt", 'w').close()
+
+        with open("class.txt", 'w') as f:
+            f.write(ans)
+
+        self.cla_can_temp.clear()
+
+        self.classname = StringVar()
+        self.classcandidate = ttk.Combobox(self.frame, state='readonly', textvariable=self.classname)
+        self.classcandidate.grid(row=2, column=2)
+        if os.path.exists(self.classcandidate_filename):
+            with open(self.classcandidate_filename) as cf:
+                for line in cf.readlines():
+                    self.cla_can_temp.append(line.strip('\n'))
+        self.classcandidate['values'] = self.cla_can_temp
+        self.classcandidate.current(0)
+        self.currentLabelclass = self.classcandidate.get()
+        self.btnclass = Button(self.frame, text='Set Label', command=self.setClass)
+        self.btnclass.grid(row=2, column=3, sticky=W+E)
+        
     def loadImage(self):
         # load image
         imagepath = self.imageList[self.cur - 1]
@@ -288,19 +301,6 @@ class LabelTool():
                     self.listbox.itemconfig(len(self.bboxIdList) - 1, fg = COLORS[color_index])
                     #self.listbox.itemconfig(len(self.bboxIdList) - 1, fg = COLORS[(len(self.bboxIdList) - 1) % len(COLORS)])
 
-    # def saveImage(self):
-    #     if self.labelfilename == '':
-    #         return
-    #     with open(self.labelfilename, 'w') as f:
-    #         f.write('%d\n' %len(self.bboxList))
-    #         for bbox in self.bboxList:
-    #             f.write("{} {} {} {} {}\n".format(int(int(bbox[0])*self.factor),
-    #                                             int(int(bbox[1])*self.factor),
-    #                                             int(int(bbox[2])*self.factor),
-    #                                             int(int(bbox[3])*self.factor), bbox[4]))
-    #             #f.write(' '.join(map(str, bbox)) + '\n')
-    #     print('Image No. %d saved' %(self.cur))
-
     def saveImage(self):
         if self.labelfilename == '':
             return
@@ -317,8 +317,15 @@ class LabelTool():
                 y_center = (y1+y2)/2
                 width = abs(x2 - x1)
                 height = abs(y2 - y1)
+                
+                # for i in self.labels_list :
+                #     self.class_dict[i] = self.Class_ID
+                #     self.Class_ID = self.Class_ID + 1
 
-                f.write("{} {} {} {} {}\n".format(bbox[4], x_center, y_center, width, height))                    # yolo format
+                # final_classID = str(self.class_dict(bbox[4]))
+
+                # f.write("{} {} {} {} {}\n".format(final_classID, x_center, y_center, width, height))                    # yolo format
+                f.write("{} {} {} {} {}\n".format(bbox[4], x_center, y_center, width, height))  
                 #f.write(' '.join(map(str, bbox)) + '\n')
         print('Image No. %d saved' %(self.cur))
 
@@ -362,7 +369,7 @@ class LabelTool():
                 self.bboxId = None
                 self.STATE['click'] = 0
 
-    def delBBox(self):
+    def delBBox(self , *args):
         sel = self.listbox.curselection()
         if len(sel) != 1 :
             return
@@ -372,7 +379,7 @@ class LabelTool():
         self.bboxList.pop(idx)
         self.listbox.delete(idx)
 
-    def clearBBox(self):
+    def clearBBox(self,*args):
         for idx in range(len(self.bboxIdList)):
             self.mainPanel.delete(self.bboxIdList[idx])
         self.listbox.delete(0, len(self.bboxList))
@@ -403,5 +410,7 @@ class LabelTool():
         print('set label class to : %s' % self.currentLabelclass)
 
 if __name__ == '__main__':
-    app = ExampleApp()
-    app.mainloop()
+    root = Tk()
+    tool = LabelTool(root)
+    root.resizable(width =  True, height = True)
+    root.mainloop()
